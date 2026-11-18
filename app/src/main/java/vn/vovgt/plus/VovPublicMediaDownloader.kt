@@ -127,7 +127,7 @@ internal object VovPublicMediaDownloader {
             error("Playlist dùng byte-range; hiện chưa hỗ trợ ghép định dạng này.")
         }
 
-        val mapUri = Regex("""#EXT-X-MAP:.*URI="([^"]+)"""")
+        val mapUri = Regex("#EXT-X-MAP:.*URI=\\\"([^\\\"]+)\\\"")
             .find(playlist)?.groupValues?.getOrNull(1)?.let { base.resolve(it)?.toString() }
         val segments = playlist.lineSequence()
             .map { it.trim() }
