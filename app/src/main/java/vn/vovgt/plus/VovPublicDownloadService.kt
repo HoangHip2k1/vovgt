@@ -44,14 +44,14 @@ class VovPublicDownloadService : Service() {
                 VovPublicDownloadControl.pause()
                 val title = VovPublicDownloadState.read(applicationContext).title
                 VovPublicDownloadState.paused(applicationContext, title)
-                updateNotification("Đã tạm dừng: $title", ongoing = false, paused = true)
+                updateNotification("Đã tạm dừng: $title", ongoing = true, paused = true)
                 return START_NOT_STICKY
             }
             ACTION_RESUME -> {
                 VovPublicDownloadControl.resume()
                 val title = VovPublicDownloadState.read(applicationContext).title
                 VovPublicDownloadState.resumed(applicationContext, title)
-                updateNotification("Đang tiếp tục: $title", ongoing = false)
+                updateNotification("Đang tiếp tục: $title", ongoing = true)
                 return START_NOT_STICKY
             }
         }
@@ -132,9 +132,10 @@ class VovPublicDownloadService : Service() {
         message: String,
         ongoing: Boolean,
         completed: Boolean = false,
-        failed: Boolean = false
+        failed: Boolean = false,
+        paused: Boolean = false
     ) {
-        val notification = buildNotification(message, ongoing, completed, failed)
+        val notification = buildNotification(message, ongoing, completed, failed, paused)
         notificationManager.notify(NOTIFICATION_ID, notification)
     }
 
