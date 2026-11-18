@@ -611,6 +611,7 @@ private fun LiveScreen(onListen: (String, String) -> Unit) {
 private fun HistoryScreen(onListen: (String, String) -> Unit, report: (String) -> Unit) {
     val context = LocalContext.current
     var list by remember { mutableStateOf<List<Download>>(emptyList()) }
+    var publicVov by remember { mutableStateOf(VovPublicDownloadState.read(context)) }
     DisposableEffect(Unit) {
         val manager = OfflineStore.manager
         val listener = object : androidx.media3.exoplayer.offline.DownloadManager.Listener {
@@ -633,13 +634,74 @@ private fun HistoryScreen(onListen: (String, String) -> Unit, report: (String) -
     }
     LaunchedEffect(Unit) {
         while (true) {
-            try { list = OfflineStore.downloads() } catch (_: Exception) { }
-            delay(500)
+            try {
+                list = OfflineStore.downloads()
+                publicVov = VovPublicDownloadState.read(context)
+            } catch (_: Exception) { }
+            delay(700)
         }
     }
     LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
-            SectionTitle("Lịch sử tải xuống", "Tiến độ được cập nhật tự động · Lưu để nghe offline")
+            SectionTitle("Quản lý tải xuống", "Theo dõi chung VOV Media và VOV Nghe & xem lại")
+            Spacer(Modifier.height(10.dp))
+            GlassCard {
+                Column(Modifier.fillMaxWidth().padding(2.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Public, null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.width(8.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("VOV • Nghe và xem lại", fontWeight = FontWeight.Bold)
+                            Text(publicVov.title, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
+                        }
+                        Text(
+                            when (publicVov.status) {
+                                "running" -> "Đang tải"
+                                "completed" -> "Hoàn tất"
+                                "failed" -> "Lỗi"
+                                else -> "Chưa tải"
+                            },
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = when (publicVov.status) {
+                                "completed" -> Color(0xFF15B78D)
+                                "failed" -> MaterialTheme.colorScheme.error
+                                else -> MaterialTheme.colorScheme.primary
+                            }
+                        )
+                    }
+                    if (publicVov.status == "running") {
+                        LinearProgressIndicator(
+                            progress = { if (publicVov.progress >= 0f) publicVov.progress else 0f },
+                            modifier = Modifier.fillMaxWidth().height(6.dp)
+                        )
+                    }
+                    if (publicVov.detail.isNotBlank()) {
+                        Text(publicVov.detail, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    if (publicVov.status == "completed" || publicVov.status == "failed") {
+                        TextButton(onClick = {
+                            VovPublicDownloadState.clear(context)
+                            publicVov = VovPublicDownloadState.read(context)
+                        }) { Text("Xóa trạng thái") }
+                    }
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            SectionTitle("VOV Media", "Các nội dung tải bằng trình quản lý offline")
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedButton(onClick = { OfflineStore.pause(context); report("Đã tạm dừng tải") }) {
+                    Icon(Icons.Default.Pause, null, Modifier.size(17.dp))
+                    Text(" Tạm dừng")
+                }
+                OutlinedButton(onClick = { OfflineStore.resume(context); report("Đã yêu cầu tiếp tục tải") }) {
+                    Icon(Icons.Default.Refresh, null, Modifier.size(17.dp))
+                    Text(" Tiếp tục")
+                }
+            }
+        }
+
             Spacer(Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedButton(onClick = { OfflineStore.pause(context); report("Đã tạm dừng tải") }) {
