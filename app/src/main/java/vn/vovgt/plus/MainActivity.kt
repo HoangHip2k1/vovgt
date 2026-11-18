@@ -14,6 +14,9 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.content.Intent
+import android.app.DownloadManager
+import android.os.Environment
+import android.webkit.WebChromeClient
 import android.net.Uri
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -91,7 +94,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private enum class Tab(val label: String) { LIVE("Trực tiếp"), SCHEDULE("Lịch phát"), HISTORY("Đã tải"), ACCOUNT("Tài khoản") }
+private enum class Tab(val label: String) { LIVE("Trực tiếp"), SCHEDULE("Lịch phát"), VOV("VOV"), HISTORY("Đã tải"), ACCOUNT("Tài khoản") }
 private data class QueuedMedia(val url: String, val title: String)
 
 @Composable
@@ -174,6 +177,7 @@ private fun VovPlusApp(player: MediaController?) {
                             Tab.SCHEDULE -> Icons.Default.EventNote
                             Tab.LIVE -> Icons.Default.Podcasts
                             Tab.HISTORY -> Icons.Default.DownloadDone
+                            Tab.VOV -> Icons.Default.Public
                             Tab.ACCOUNT -> Icons.Default.PersonOutline
                         }
                         NavigationBarItem(
@@ -198,6 +202,7 @@ private fun VovPlusApp(player: MediaController?) {
                         )
                         Tab.LIVE -> LiveScreen(onListen = listen)
                         Tab.HISTORY -> HistoryScreen(onListen = listen, report = report)
+                        Tab.VOV -> VovArchiveBrowserScreen(report = report)
                         Tab.ACCOUNT -> AccountScreen(
                             confirmed = confirmedSession,
                             onConfirmed = {
@@ -222,6 +227,71 @@ private fun VovPlusApp(player: MediaController?) {
                 if (player != null) PlayerStrip(player)
             }
         }
+    }
+}
+
+@Composable
+private fun VovArchiveBrowserScreen(report: (String) -> Unit) {
+    val context = LocalContext.current
+    var detected by remember { mutableStateOf("") }
+    var pageTitle by remember { mutableStateOf("VOV – Nghe và xem lại") }
+    var pageUrl by remember { mutableStateOf("https://vov.gov.vn/nghe-va-xem-lai") }
+    val webView = remember {
+        WebView(context).apply {
+            settings.javaScriptEnabled = true
+            settings.domStorageEnabled = true
+            webChromeClient = WebChromeClient()
+            webViewClient = object : WebViewClient() {
+                override fun onPageFinished(view: WebView?, url: String?) {
+                    pageTitle = view?.title?.take(100) ?: "VOV – Nghe và xem lại"
+                    pageUrl = url ?: pageUrl
+                }
+                override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): android.webkit.WebResourceResponse? {
+                    val url = request?.url?.toString().orEmpty()
+                    val path = request?.url?.lastPathSegment?.lowercase().orEmpty()
+                    if (url.startsWith("https://") && (path.endsWith(".mp4") || path.endsWith(".m3u8") || path.endsWith(".ts"))) {
+                        android.os.Handler(android.os.Looper.getMainLooper()).post {
+                            detected = url
+                        }
+                    }
+                    return super.shouldInterceptRequest(view, request)
+                }
+            }
+            loadUrl("https://vov.gov.vn/nghe-va-xem-lai")
+        }
+    }
+    androidx.compose.runtime.DisposableEffect(webView) {
+        onDispose { /* Keep page state while this screen is composed; WebView is released with activity. */ }
+    }
+    Column(Modifier.fillMaxSize()) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("Nguồn nội dung chính thức VOV", modifier = Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
+            TextButton(onClick = { webView.reload() }) { Text("Tải lại") }
+        }
+        if (detected.isNotBlank()) {
+            Surface(color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(12.dp)) {
+                    Text("Đã phát hiện media công khai", fontWeight = FontWeight.Bold)
+                    Text(detected.substringAfterLast('/').take(70), maxLines = 1, fontSize = 12.sp)
+                    Button(onClick = {
+                        try {
+                            val uri = Uri.parse(detected)
+                            val request = DownloadManager.Request(uri)
+                                .setTitle(pageTitle.ifBlank { "VOV media" })
+                                .setDescription("Tải từ trang VOV")
+                                .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                                .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "VOV-" + (uri.lastPathSegment ?: "media").take(100))
+                            val manager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+                            manager.enqueue(request)
+                            report("Đã gửi yêu cầu tải media vào thư mục Download")
+                        } catch (e: Exception) { report(e.message ?: "Không thể tải media này") }
+                    }) { Icon(Icons.Default.Download, null); Spacer(Modifier.width(6.dp)); Text("Tải media") }
+                }
+            }
+        } else {
+            Text("Mở chương trình để ứng dụng nhận diện URL MP4, M3U8 hoặc TS công khai.", modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        AndroidView(factory = { webView }, modifier = Modifier.weight(1f))
     }
 }
 
