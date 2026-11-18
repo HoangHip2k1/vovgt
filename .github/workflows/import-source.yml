@@ -23,7 +23,9 @@ jobs:
         shell: bash
         run: |
           git clone --depth 1 https://github.com/HoangHip2k1/vovgiaothong.git /tmp/vovgiaothong
-          rsync -a --exclude='.git' /tmp/vovgiaothong/ ./
+          # Do not import upstream Actions workflows: GITHUB_TOKEN cannot modify
+          # files under .github/workflows without a separate workflow-scoped token.
+          rsync -a --exclude='.git' --exclude='.github/workflows' /tmp/vovgiaothong/ ./
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
