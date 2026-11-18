@@ -657,6 +657,7 @@ private fun HistoryScreen(onListen: (String, String) -> Unit, report: (String) -
                         Text(
                             when (publicVov.status) {
                                 "running" -> "Đang tải"
+                                "paused" -> "Đã tạm dừng"
                                 "completed" -> "Hoàn tất"
                                 "failed" -> "Lỗi"
                                 else -> "Chưa tải"
@@ -675,6 +676,25 @@ private fun HistoryScreen(onListen: (String, String) -> Unit, report: (String) -
                             progress = { if (publicVov.progress >= 0f) publicVov.progress else 0f },
                             modifier = Modifier.fillMaxWidth().height(6.dp)
                         )
+                    }
+                    if (publicVov.status == "running" || publicVov.status == "paused") {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (publicVov.status == "running") {
+                                OutlinedButton(onClick = {
+                                    context.startService(Intent(context, VovPublicDownloadService::class.java).setAction(VovPublicDownloadService.ACTION_PAUSE))
+                                }) {
+                                    Icon(Icons.Default.Pause, null, Modifier.size(16.dp))
+                                    Text(" Tạm dừng")
+                                }
+                            } else {
+                                Button(onClick = {
+                                    context.startService(Intent(context, VovPublicDownloadService::class.java).setAction(VovPublicDownloadService.ACTION_RESUME))
+                                }) {
+                                    Icon(Icons.Default.PlayArrow, null, Modifier.size(16.dp))
+                                    Text(" Tiếp tục")
+                                }
+                            }
+                        }
                     }
                     if (publicVov.detail.isNotBlank()) {
                         Text(publicVov.detail, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
