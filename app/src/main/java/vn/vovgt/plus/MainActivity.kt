@@ -341,7 +341,13 @@ private fun VovArchiveBrowserScreen(report: (String) -> Unit) {
                                         mediaUrl = detected,
                                         title = pageTitle,
                                         pageUrl = pageUrl,
-                                        onProgress = { progress = it }
+                                        onProgress = { message ->
+                                            // Downloader runs on Dispatchers.IO; Compose state must only
+                                            // be changed on the Android main thread.
+                                            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                                progress = message
+                                            }
+                                        }
                                     )
                                     progress = "Đã lưu: ${result.location}/${result.displayName}"
                                     report("Đã tải xong nội dung VOV: ${result.displayName}")
