@@ -9,6 +9,9 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.os.Handler
+import android.os.Looper
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -24,6 +27,7 @@ import kotlinx.coroutines.launch
  */
 class VovPublicDownloadService : Service() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val mainHandler = Handler(Looper.getMainLooper())
     private var downloadJob: kotlinx.coroutines.Job? = null
     private val notificationManager by lazy {
         getSystemService(NOTIFICATION_SERVICE) as NotificationManager
@@ -55,7 +59,15 @@ class VovPublicDownloadService : Service() {
             return START_NOT_STICKY
         }
 
-        startAsForeground("Đang chuẩn bị tải: $title")
+        try {
+            startAsForeground("Đang chuẩn bị tải: $title")
+        } catch (error: Exception) {
+            // A foreground-service startup exception must not crash the whole app process.
+            Log.e(TAG, "Cannot promote VOV download service to foreground", error)
+            stopSelf(startId)
+            return START_NOT_STICKY
+        }
+
         downloadJob = serviceScope.launch {
             try {
                 val result = VovPublicMediaDownloader.download(
@@ -81,8 +93,11 @@ class VovPublicDownloadService : Service() {
                     failed = true
                 )
             } finally {
-                stopForeground(STOP_FOREGROUND_DETACH)
-                stopSelf(startId)
+                // Service lifecycle operations are dispatched on Android's main thread.
+                mainHandler.post {
+                    stopForeground(STOP_FOREGROUND_DETACH)
+                    stopSelf(startId)
+                }
             }
         }
         return START_NOT_STICKY
@@ -90,15 +105,10 @@ class VovPublicDownloadService : Service() {
 
     private fun startAsForeground(message: String) {
         val notification = buildNotification(message, ongoing = true)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(
-                NOTIFICATION_ID,
-                notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
-            )
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
-        }
+        // The service type is declared in AndroidManifest.xml. Using the
+        // two-argument overload lets Android apply that manifest type and avoids
+        // a runtime type mismatch while still creating a foreground service.
+        startForeground(NOTIFICATION_ID, notification)
     }
 
     private fun updateNotification(
@@ -172,5 +182,6 @@ class VovPublicDownloadService : Service() {
         const val EXTRA_PAGE = "public_vov_page"
         private const val CHANNEL_ID = "vov_public_downloads"
         private const val NOTIFICATION_ID = 7412
+        private const val TAG = "VovPublicDownload"
     }
 }
