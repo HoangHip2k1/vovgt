@@ -41,7 +41,7 @@ internal object VovPublicDownloadState {
     }
 
     fun progress(context: Context, title: String, detail: String) {
-        val fraction = Regex("""(\\d+)\\s*/\\s*(\\d+)""").find(detail)?.let {
+        val fraction = Regex("""(\d+)\s*/\s*(\d+)""").find(detail)?.let {
             val current = it.groupValues[1].toFloatOrNull() ?: 0f
             val total = it.groupValues[2].toFloatOrNull() ?: 0f
             if (total > 0f) (current / total).coerceIn(0f, 0.99f) else -1f
