@@ -9,6 +9,7 @@ import android.provider.MediaStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
@@ -65,7 +66,7 @@ internal object VovPublicMediaDownloader {
         context: Context, url: String, title: String, pageUrl: String,
         onProgress: (String) -> Unit
     ): Result {
-        client.newCall(request(url, pageUrl)).execute().use { response ->
+        return client.newCall(request(url, pageUrl)).execute().use { response ->
             if (!response.isSuccessful) error("Máy chủ VOV trả về HTTP ${response.code}.")
             val body = response.body ?: error("Máy chủ không trả dữ liệu.")
             val type = body.contentType()?.toString().orEmpty()
@@ -151,7 +152,7 @@ internal object VovPublicMediaDownloader {
                 copyResource(segment, pageUrl, output)
             }
         }
-        Result(name, saved)
+        return Result(name, saved)
     }
 
     private fun fetchText(url: String, pageUrl: String): String {
@@ -220,6 +221,5 @@ internal object VovPublicMediaDownloader {
         if (bytes < 1024 * 1024) "${bytes / 1024} KB"
         else String.format(Locale.US, "%.1f MB", bytes / (1024.0 * 1024.0))
 
-    private fun String.toHttpUrl(): HttpUrl =
-        okhttp3.HttpUrl.get(this)
+    private fun String.toHttpUrl(): HttpUrl = this.toHttpUrl()
 }
