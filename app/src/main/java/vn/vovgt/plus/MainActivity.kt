@@ -702,19 +702,6 @@ private fun HistoryScreen(onListen: (String, String) -> Unit, report: (String) -
             }
         }
 
-            Spacer(Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedButton(onClick = { OfflineStore.pause(context); report("Đã tạm dừng tải") }) {
-                    Icon(Icons.Default.Pause, null, Modifier.size(17.dp))
-                    Text(" Tạm dừng")
-                }
-                OutlinedButton(onClick = { OfflineStore.resume(context); report("Đã yêu cầu tiếp tục tải") }) {
-                    Icon(Icons.Default.Refresh, null, Modifier.size(17.dp))
-                    Text(" Tiếp tục")
-                }
-            }
-            Spacer(Modifier.height(6.dp))
-        }
         if (list.isEmpty()) item {
             GlassCard {
                 Column(Modifier.fillMaxWidth().padding(vertical = 32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
