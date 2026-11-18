@@ -14,6 +14,8 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
 import java.io.OutputStream
+import java.io.IOException
+import java.net.UnknownHostException
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
@@ -66,7 +68,7 @@ internal object VovPublicMediaDownloader {
         context: Context, url: String, title: String, pageUrl: String,
         onProgress: (String) -> Unit
     ): Result {
-        return client.newCall(request(url, pageUrl)).execute().use { response ->
+        return executeWithDnsRetry(url, pageUrl).use { response ->
             if (!response.isSuccessful) error("Máy chủ VOV trả về HTTP ${response.code}.")
             val body = response.body ?: error("Máy chủ không trả dữ liệu.")
             val type = body.contentType()?.toString().orEmpty()
@@ -159,7 +161,7 @@ internal object VovPublicMediaDownloader {
     }
 
     private fun fetchText(url: String, pageUrl: String): String {
-        client.newCall(request(url, pageUrl)).execute().use { response ->
+        executeWithDnsRetry(url, pageUrl).use { response ->
             if (!response.isSuccessful) error("Không tải được playlist (HTTP ${response.code}).")
             val type = response.body?.contentType()?.toString().orEmpty()
             if (type.contains("text/html", true)) error("Máy chủ trả HTML thay vì playlist M3U8.")
@@ -169,13 +171,32 @@ internal object VovPublicMediaDownloader {
 
     private fun copyResource(url: String, pageUrl: String, output: OutputStream) {
         VovPublicDownloadControl.awaitIfPaused()
-        client.newCall(request(url, pageUrl)).execute().use { response ->
+        executeWithDnsRetry(url, pageUrl).use { response ->
             if (!response.isSuccessful) error("Không tải được một phân đoạn HLS (HTTP ${response.code}).")
             val body = response.body ?: error("Phân đoạn HLS rỗng.")
             body.byteStream().use { input -> input.copyTo(output, 64 * 1024) }
         }
     }
 
+
+    /** Retry transient Android DNS failures for public VOV media hosts. */
+    private fun executeWithDnsRetry(url: String, pageUrl: String): okhttp3.Response {
+        var lastDnsError: UnknownHostException? = null
+        for (attempt in 0 until 3) {
+            VovPublicDownloadControl.awaitIfPaused()
+            try {
+                return client.newCall(request(url, pageUrl)).execute()
+            } catch (error: UnknownHostException) {
+                lastDnsError = error
+                if (attempt < 2) Thread.sleep(900L * (attempt + 1))
+            }
+        }
+        val host = try { url.toHttpUrl().host } catch (_: Exception) { "không xác định" }
+        throw IOException(
+            "Không phân giải được máy chủ media '$host' sau 3 lần thử. Hãy đổi Wi-Fi/4G hoặc kiểm tra DNS riêng tư rồi thử lại.",
+            lastDnsError
+        )
+    }
     private fun writeToDownloads(
         context: Context, name: String, mime: String, write: (OutputStream) -> Unit
     ): String {
