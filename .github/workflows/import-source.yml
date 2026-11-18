@@ -1,17 +1,15 @@
-name: Bootstrap VOVGT from original Android project
+name: Build VOVGT Android APK
 
 on:
   push:
     branches: [main]
-    paths:
-      - .github/workflows/import-source.yml
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  import-and-build:
-    if: contains(github.event.head_commit.message, '[vovgt-bootstrap]')
+  build-android:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout new repository
@@ -19,12 +17,13 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Only import the original project during an explicitly marked bootstrap run.
+      # Normal code changes must never overwrite the new VOV tab or downloader work.
       - name: Copy the original Android project
+        if: contains(github.event.head_commit.message, '[vovgt-bootstrap]')
         shell: bash
         run: |
           git clone --depth 1 https://github.com/HoangHip2k1/vovgiaothong.git /tmp/vovgiaothong
-          # Do not import upstream Actions workflows: GITHUB_TOKEN cannot modify
-          # files under .github/workflows without a separate workflow-scoped token.
           rsync -a --exclude='.git' --exclude='.github/workflows' /tmp/vovgiaothong/ ./
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
