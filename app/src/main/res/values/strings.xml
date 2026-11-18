@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">VOV Giao thông+</string>
+    <string name="download_channel">Tải âm thanh</string>
+    <string name="download_channel_description">Tiến độ và trạng thái tải phát lại</string>
+</resources>
