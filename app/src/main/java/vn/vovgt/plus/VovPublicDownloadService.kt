@@ -68,6 +68,7 @@ class VovPublicDownloadService : Service() {
             return START_NOT_STICKY
         }
 
+        VovPublicDownloadState.started(applicationContext, title)
         downloadJob = serviceScope.launch {
             try {
                 val result = VovPublicMediaDownloader.download(
@@ -76,26 +77,25 @@ class VovPublicDownloadService : Service() {
                     title = title,
                     pageUrl = pageUrl,
                     onProgress = { message ->
+                        VovPublicDownloadState.progress(applicationContext, title, message)
                         updateNotification(message, ongoing = true)
                     }
                 )
-                updateNotification(
-                    "Đã tải xong: ${result.displayName} • ${result.location}",
-                    ongoing = false,
-                    completed = true
-                )
+                val doneMessage = "Đã tải xong: ${result.displayName} • ${result.location}"
+                VovPublicDownloadState.completed(applicationContext, title, doneMessage)
+                updateNotification(doneMessage, ongoing = false, completed = true)
+                notificationManager.cancel(NOTIFICATION_ID)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
-                updateNotification(
-                    "Tải VOV thất bại: ${error.message ?: "Lỗi không xác định"}",
-                    ongoing = false,
-                    failed = true
-                )
+                val failure = "Tải VOV thất bại: ${error.message ?: "Lỗi không xác định"}"
+                VovPublicDownloadState.failed(applicationContext, title, failure)
+                updateNotification(failure, ongoing = false, failed = true)
+                notificationManager.cancel(NOTIFICATION_ID)
             } finally {
                 // Service lifecycle operations are dispatched on Android's main thread.
                 mainHandler.post {
-                    stopForeground(STOP_FOREGROUND_DETACH)
+                    stopForeground(STOP_FOREGROUND_REMOVE)
                     stopSelf(startId)
                 }
             }
