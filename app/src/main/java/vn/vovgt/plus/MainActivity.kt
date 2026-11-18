@@ -233,12 +233,10 @@ private fun VovPlusApp(player: MediaController?) {
 @Composable
 private fun VovArchiveBrowserScreen(report: (String) -> Unit) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     var detected by remember { mutableStateOf("") }
     var mediaKind by remember { mutableStateOf("") }
     var pageTitle by remember { mutableStateOf("VOV – Nghe và xem lại") }
     var pageUrl by remember { mutableStateOf("https://vov.gov.vn/nghe-va-xem-lai") }
-    var downloading by remember { mutableStateOf(false) }
     var progress by remember { mutableStateOf("") }
     var webError by remember { mutableStateOf("") }
 
@@ -330,46 +328,27 @@ private fun VovArchiveBrowserScreen(report: (String) -> Unit) {
                     }
                     Text(pageTitle, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
                     Button(
-                        enabled = !downloading,
                         onClick = {
-                            downloading = true
-                            progress = "Đang chuẩn bị tải…"
-                            scope.launch {
-                                try {
-                                    val result = VovPublicMediaDownloader.download(
-                                        context = context,
-                                        mediaUrl = detected,
-                                        title = pageTitle,
-                                        pageUrl = pageUrl,
-                                        onProgress = { message ->
-                                            // Downloader runs on Dispatchers.IO; Compose state must only
-                                            // be changed on the Android main thread.
-                                            android.os.Handler(android.os.Looper.getMainLooper()).post {
-                                                progress = message
-                                            }
-                                        }
-                                    )
-                                    progress = "Đã lưu: ${result.location}/${result.displayName}"
-                                    report("Đã tải xong nội dung VOV: ${result.displayName}")
-                                } catch (e: Exception) {
-                                    progress = e.message ?: "Tải thất bại."
-                                    report(progress)
-                                } finally {
-                                    downloading = false
+                            try {
+                                val intent = Intent(context, VovPublicDownloadService::class.java).apply {
+                                    action = VovPublicDownloadService.ACTION_START
+                                    putExtra(VovPublicDownloadService.EXTRA_URL, detected)
+                                    putExtra(VovPublicDownloadService.EXTRA_TITLE, pageTitle)
+                                    putExtra(VovPublicDownloadService.EXTRA_PAGE, pageUrl)
                                 }
+                                androidx.core.content.ContextCompat.startForegroundService(context, intent)
+                                progress = "Đã bắt đầu tải nền. Bạn có thể chuyển sang tab khác; tiến trình hiển thị trên thông báo."
+                                report("Đã bắt đầu tải nội dung VOV ở chế độ nền.")
+                            } catch (e: Exception) {
+                                progress = e.message ?: "Không thể bắt đầu tải nền."
+                                report(progress)
                             }
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        if (downloading) {
-                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
-                            Spacer(Modifier.width(9.dp))
-                            Text("Đang tải…")
-                        } else {
-                            Icon(Icons.Default.Download, contentDescription = null)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Tải vào Download/VOV")
-                        }
+                        Icon(Icons.Default.Download, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Tải nền vào Download/VOV")
                     }
                     if (progress.isNotBlank()) {
                         Text(progress, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -390,7 +369,7 @@ private fun VovArchiveBrowserScreen(report: (String) -> Unit) {
                     Icon(Icons.Default.Info, contentDescription = null, tint = Royal)
                     Spacer(Modifier.width(9.dp))
                     Text(
-                        "Mở một chương trình và nhấn phát. Khi tìm thấy MP4 hoặc playlist M3U8 công khai, nút tải sẽ xuất hiện tại đây.",
+                        "Mở một chương trình và nhấn phát. Khi tìm thấy MP4 hoặc playlist M3U8 công khai, nút tải sẽ xuất hiện. Tải tiếp tục khi bạn chuyển tab.",
                         fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
