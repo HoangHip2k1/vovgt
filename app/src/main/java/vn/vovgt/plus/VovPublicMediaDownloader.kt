@@ -77,6 +77,7 @@ internal object VovPublicMediaDownloader {
                 val buffer = ByteArray(64 * 1024)
                 var total = 0L
                 while (true) {
+                    VovPublicDownloadControl.awaitIfPaused()
                     val count = input.read(buffer)
                     if (count < 0) break
                     output.write(buffer, 0, count)
@@ -148,7 +149,8 @@ internal object VovPublicMediaDownloader {
                 copyResource(mapUri, pageUrl, output)
             }
             segments.forEachIndexed { index, segment ->
-                // Count a segment only after its bytes have been downloaded and written.
+                // Pause safely between segments; preserve playlist order.
+                VovPublicDownloadControl.awaitIfPaused()
                 copyResource(segment, pageUrl, output)
                 onProgress("Đã ghép HLS: ${index + 1}/${segments.size}")
             }
@@ -166,6 +168,7 @@ internal object VovPublicMediaDownloader {
     }
 
     private fun copyResource(url: String, pageUrl: String, output: OutputStream) {
+        VovPublicDownloadControl.awaitIfPaused()
         client.newCall(request(url, pageUrl)).execute().use { response ->
             if (!response.isSuccessful) error("Không tải được một phân đoạn HLS (HTTP ${response.code}).")
             val body = response.body ?: error("Phân đoạn HLS rỗng.")
