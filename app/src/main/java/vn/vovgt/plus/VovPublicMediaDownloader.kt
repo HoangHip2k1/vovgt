@@ -103,7 +103,7 @@ internal object VovPublicMediaDownloader {
             for (i in lines.indices) {
                 val line = lines[i].trim()
                 if (line.startsWith("#EXT-X-STREAM-INF")) {
-                    val bandwidth = Regex("""BANDWIDTH=(\\d+)""").find(line)
+                    val bandwidth = Regex("""BANDWIDTH=(\d+)""").find(line)
                         ?.groupValues?.getOrNull(1)?.toLongOrNull() ?: 0L
                     val next = lines.drop(i + 1).firstOrNull { it.isNotBlank() && !it.trim().startsWith("#") }?.trim()
                     if (next != null) variants += bandwidth to (base.resolve(next)?.toString()
@@ -210,7 +210,7 @@ internal object VovPublicMediaDownloader {
 
     private fun safeName(raw: String, fallback: String): String {
         val clean = raw.replace(Regex("""[\\/:*?"<>|]"""), "_")
-            .replace(Regex("""\\s+"""), " ")
+            .replace(Regex("""\s+"""), " ")
             .trim()
             .take(80)
         return clean.ifBlank { fallback }
