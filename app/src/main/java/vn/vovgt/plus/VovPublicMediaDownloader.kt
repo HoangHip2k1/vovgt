@@ -221,5 +221,4 @@ internal object VovPublicMediaDownloader {
         if (bytes < 1024 * 1024) "${bytes / 1024} KB"
         else String.format(Locale.US, "%.1f MB", bytes / (1024.0 * 1024.0))
 
-    private fun String.toHttpUrl(): HttpUrl = this.toHttpUrl()
 }
