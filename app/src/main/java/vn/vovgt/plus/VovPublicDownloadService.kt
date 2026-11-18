@@ -39,6 +39,22 @@ class VovPublicDownloadService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        when (intent?.action) {
+            ACTION_PAUSE -> {
+                VovPublicDownloadControl.pause()
+                val title = VovPublicDownloadState.read(applicationContext).title
+                VovPublicDownloadState.paused(applicationContext, title)
+                updateNotification("Đã tạm dừng: $title", ongoing = false, paused = true)
+                return START_NOT_STICKY
+            }
+            ACTION_RESUME -> {
+                VovPublicDownloadControl.resume()
+                val title = VovPublicDownloadState.read(applicationContext).title
+                VovPublicDownloadState.resumed(applicationContext, title)
+                updateNotification("Đang tiếp tục: $title", ongoing = false)
+                return START_NOT_STICKY
+            }
+        }
         if (intent?.action != ACTION_START) {
             stopSelf(startId)
             return START_NOT_STICKY
@@ -68,6 +84,7 @@ class VovPublicDownloadService : Service() {
             return START_NOT_STICKY
         }
 
+        VovPublicDownloadControl.resume()
         VovPublicDownloadState.started(applicationContext, title)
         downloadJob = serviceScope.launch {
             try {
@@ -125,7 +142,8 @@ class VovPublicDownloadService : Service() {
         message: String,
         ongoing: Boolean,
         completed: Boolean = false,
-        failed: Boolean = false
+        failed: Boolean = false,
+        paused: Boolean = false
     ): Notification {
         val openApp = Intent(this, MainActivity::class.java)
         val pendingIntent = PendingIntent.getActivity(
@@ -139,14 +157,20 @@ class VovPublicDownloadService : Service() {
             failed -> "VOV • Tải thất bại"
             else -> "VOV • Đang tải nội dung"
         }
+        val pauseIntent = PendingIntent.getService(this, 1, Intent(this, VovPublicDownloadService::class.java).setAction(ACTION_PAUSE), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val resumeIntent = PendingIntent.getService(this, 2, Intent(this, VovPublicDownloadService::class.java).setAction(ACTION_RESUME), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_radio)
             .setContentTitle(title)
             .setContentText(message.take(180))
             .setStyle(NotificationCompat.BigTextStyle().bigText(message))
             .setContentIntent(pendingIntent)
-            .setOngoing(ongoing)
+            .setOngoing(false)
             .setOnlyAlertOnce(true)
+            .apply {
+                if (ongoing && !paused) addAction(android.R.drawable.ic_media_pause, "Tạm dừng", pauseIntent)
+                if (paused) addAction(android.R.drawable.ic_media_play, "Tiếp tục", resumeIntent)
+            }
             .setAutoCancel(!ongoing)
             .setProgress(0, 0, ongoing)
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
@@ -177,6 +201,8 @@ class VovPublicDownloadService : Service() {
 
     companion object {
         const val ACTION_START = "vn.vovgt.plus.action.START_PUBLIC_VOV_DOWNLOAD"
+        const val ACTION_PAUSE = "vn.vovgt.plus.action.PAUSE_PUBLIC_VOV_DOWNLOAD"
+        const val ACTION_RESUME = "vn.vovgt.plus.action.RESUME_PUBLIC_VOV_DOWNLOAD"
         const val EXTRA_URL = "public_vov_url"
         const val EXTRA_TITLE = "public_vov_title"
         const val EXTRA_PAGE = "public_vov_page"
