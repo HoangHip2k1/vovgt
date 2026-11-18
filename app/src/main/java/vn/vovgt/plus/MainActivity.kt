@@ -233,25 +233,51 @@ private fun VovPlusApp(player: MediaController?) {
 @Composable
 private fun VovArchiveBrowserScreen(report: (String) -> Unit) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var detected by remember { mutableStateOf("") }
+    var mediaKind by remember { mutableStateOf("") }
     var pageTitle by remember { mutableStateOf("VOV – Nghe và xem lại") }
     var pageUrl by remember { mutableStateOf("https://vov.gov.vn/nghe-va-xem-lai") }
+    var downloading by remember { mutableStateOf(false) }
+    var progress by remember { mutableStateOf("") }
+    var webError by remember { mutableStateOf("") }
+
     val webView = remember {
         WebView(context).apply {
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
+            settings.loadsImagesAutomatically = true
             webChromeClient = WebChromeClient()
             webViewClient = object : WebViewClient() {
                 override fun onPageFinished(view: WebView?, url: String?) {
-                    pageTitle = view?.title?.take(100) ?: "VOV – Nghe và xem lại"
+                    pageTitle = view?.title?.take(100)?.ifBlank { "VOV – Nghe và xem lại" }
+                        ?: "VOV – Nghe và xem lại"
                     pageUrl = url ?: pageUrl
+                    webError = ""
                 }
-                override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): android.webkit.WebResourceResponse? {
+                override fun onReceivedError(
+                    view: WebView?, request: WebResourceRequest?, error: android.webkit.WebResourceError?
+                ) {
+                    if (request?.isForMainFrame == true) {
+                        webError = error?.description?.toString() ?: "Không tải được trang VOV."
+                    }
+                }
+                override fun shouldInterceptRequest(
+                    view: WebView?, request: WebResourceRequest?
+                ): android.webkit.WebResourceResponse? {
                     val url = request?.url?.toString().orEmpty()
-                    val path = request?.url?.lastPathSegment?.lowercase().orEmpty()
-                    if (url.startsWith("https://") && (path.endsWith(".mp4") || path.endsWith(".m3u8") || path.endsWith(".ts"))) {
+                    val path = request?.url?.encodedPath?.lowercase().orEmpty()
+                    val kind = when {
+                        path.endsWith(".mp4") -> "MP4"
+                        path.endsWith(".m3u8") -> "M3U8"
+                        else -> ""
+                    }
+                    // Ignore .ts: these are commonly individual HLS chunks, not complete videos.
+                    if (url.startsWith("https://") && kind.isNotEmpty()) {
                         android.os.Handler(android.os.Looper.getMainLooper()).post {
                             detected = url
+                            mediaKind = kind
+                            progress = ""
                         }
                     }
                     return super.shouldInterceptRequest(view, request)
@@ -260,36 +286,113 @@ private fun VovArchiveBrowserScreen(report: (String) -> Unit) {
             loadUrl("https://vov.gov.vn/nghe-va-xem-lai")
         }
     }
-    androidx.compose.runtime.DisposableEffect(webView) {
-        onDispose { /* Keep page state while this screen is composed; WebView is released with activity. */ }
-    }
-    Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("Nguồn nội dung chính thức VOV", modifier = Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
-            TextButton(onClick = { webView.reload() }) { Text("Tải lại") }
+
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        Column(
+            Modifier.fillMaxWidth().background(Deep).padding(horizontal = 16.dp, vertical = 14.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier.size(42.dp).background(Cyan, RoundedCornerShape(13.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.Podcasts, contentDescription = null, tint = Deep)
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("VOV NGHE & XEM LẠI", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text("Nguồn nội dung chính thức • Không cần đăng nhập", color = Color(0xFFB8D9E8), fontSize = 11.sp)
+                }
+                IconButton(onClick = {
+                    detected = ""; mediaKind = ""; progress = ""; webError = ""
+                    webView.reload()
+                }) {
+                    Icon(Icons.Default.Refresh, contentDescription = "Tải lại", tint = Color.White)
+                }
+            }
         }
+
         if (detected.isNotBlank()) {
-            Surface(color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(12.dp)) {
-                    Text("Đã phát hiện media công khai", fontWeight = FontWeight.Bold)
-                    Text(detected.substringAfterLast('/').take(70), maxLines = 1, fontSize = 12.sp)
-                    Button(onClick = {
-                        try {
-                            val uri = Uri.parse(detected)
-                            val request = DownloadManager.Request(uri)
-                                .setTitle(pageTitle.ifBlank { "VOV media" })
-                                .setDescription("Tải từ trang VOV")
-                                .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                                .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "VOV-" + (uri.lastPathSegment ?: "media").take(100))
-                            val manager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-                            manager.enqueue(request)
-                            report("Đã gửi yêu cầu tải media vào thư mục Download")
-                        } catch (e: Exception) { report(e.message ?: "Không thể tải media này") }
-                    }) { Icon(Icons.Default.Download, null); Spacer(Modifier.width(6.dp)); Text("Tải media") }
+            Surface(
+                color = MaterialTheme.colorScheme.surface,
+                shape = RoundedCornerShape(16.dp),
+                tonalElevation = 2.dp,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp)
+            ) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.VideoLibrary, contentDescription = null, tint = Royal)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Đã tìm thấy nội dung có thể tải", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                        Surface(color = Pale, shape = RoundedCornerShape(8.dp)) {
+                            Text(mediaKind, color = Deep, fontWeight = FontWeight.Bold, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp))
+                        }
+                    }
+                    Text(pageTitle, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
+                    Button(
+                        enabled = !downloading,
+                        onClick = {
+                            downloading = true
+                            progress = "Đang chuẩn bị tải…"
+                            scope.launch {
+                                try {
+                                    val result = VovPublicMediaDownloader.download(
+                                        context = context,
+                                        mediaUrl = detected,
+                                        title = pageTitle,
+                                        pageUrl = pageUrl,
+                                        onProgress = { progress = it }
+                                    )
+                                    progress = "Đã lưu: ${result.location}/${result.displayName}"
+                                    report("Đã tải xong nội dung VOV: ${result.displayName}")
+                                } catch (e: Exception) {
+                                    progress = e.message ?: "Tải thất bại."
+                                    report(progress)
+                                } finally {
+                                    downloading = false
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        if (downloading) {
+                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+                            Spacer(Modifier.width(9.dp))
+                            Text("Đang tải…")
+                        } else {
+                            Icon(Icons.Default.Download, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Tải vào Download/VOV")
+                        }
+                    }
+                    if (progress.isNotBlank()) {
+                        Text(progress, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Text(
+                        "Không hiển thị TS riêng lẻ vì đó thường chỉ là một đoạn nhỏ của video HLS.",
+                        fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         } else {
-            Text("Mở chương trình để ứng dụng nhận diện URL MP4, M3U8 hoặc TS công khai.", modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Surface(
+                color = MaterialTheme.colorScheme.surface,
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 9.dp)
+            ) {
+                Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Info, contentDescription = null, tint = Royal)
+                    Spacer(Modifier.width(9.dp))
+                    Text(
+                        "Mở một chương trình và nhấn phát. Khi tìm thấy MP4 hoặc playlist M3U8 công khai, nút tải sẽ xuất hiện tại đây.",
+                        fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        if (webError.isNotBlank()) {
+            Text("Không mở được trang VOV: $webError", color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(12.dp))
         }
         AndroidView(factory = { webView }, modifier = Modifier.weight(1f))
     }
