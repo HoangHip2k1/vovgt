@@ -148,8 +148,9 @@ internal object VovPublicMediaDownloader {
                 copyResource(mapUri, pageUrl, output)
             }
             segments.forEachIndexed { index, segment ->
-                onProgress("Đang ghép HLS: ${index + 1}/${segments.size}")
+                // Count a segment only after its bytes have been downloaded and written.
                 copyResource(segment, pageUrl, output)
+                onProgress("Đã ghép HLS: ${index + 1}/${segments.size}")
             }
         }
         return Result(name, saved)
