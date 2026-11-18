@@ -26,6 +26,9 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <service android:name=".VovPublicDownloadService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
         <service android:name=".VovDownloadService"
             android:exported="false"
             android:foregroundServiceType="dataSync">
