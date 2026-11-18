@@ -49,6 +49,17 @@ internal object VovPublicDownloadState {
         write(context, true, title, "running", detail, fraction)
     }
 
+
+    fun paused(context: Context, title: String) {
+        val current = read(context)
+        write(context, true, title, "paused", current.detail.ifBlank { "Đã tạm dừng" }, current.progress)
+    }
+
+    fun resumed(context: Context, title: String) {
+        val current = read(context)
+        write(context, true, title, "running", current.detail.ifBlank { "Đang tiếp tục tải…" }, current.progress)
+    }
+
     fun completed(context: Context, title: String, detail: String) {
         write(context, false, title, "completed", detail, 1f)
     }
@@ -77,5 +88,36 @@ internal object VovPublicDownloadState {
             .putFloat(KEY_PROGRESS, progress)
             .putLong(KEY_UPDATED, System.currentTimeMillis())
             .apply()
+    }
+}
+
+
+/** Pause gate shared by the VOV public downloader and its foreground service. */
+internal object VovPublicDownloadControl {
+    private val monitor = java.lang.Object()
+    @Volatile private var paused = false
+
+    fun pause() {
+        synchronized(monitor) { paused = true }
+    }
+
+    fun resume() {
+        synchronized(monitor) {
+            paused = false
+            monitor.notifyAll()
+        }
+    }
+
+    fun awaitIfPaused() {
+        synchronized(monitor) {
+            while (paused) {
+                try {
+                    monitor.wait()
+                } catch (interrupted: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    throw kotlinx.coroutines.CancellationException("VOV download interrupted")
+                }
+            }
+        }
     }
 }
